@@ -882,3 +882,94 @@ func matchesNegativeKeyword(filenameLower string, keywords []string) bool {
 	}
 	return false
 }
+
+// --- Preview support (preview-before-download) ---
+//
+// The preview service drives slskd transfers itself and streams partial bytes
+// from slskd's incomplete directory, but it reuses this package's search
+// scoring and download adoption logic so previews pick files exactly like the
+// auto-downloader does.
+
+// RankedCandidate is the exported shape of the internal scoring candidate,
+// for the preview service's reject-and-advance flow.
+type RankedCandidate struct {
+	Username    string
+	Filename    string
+	Size        int64
+	BitRate     int
+	Score       int
+	HasFreeSlot bool
+	QueueLength int
+}
+
+// PreviewCandidates scores search responses with the auto-download filters
+// (title+artist match, negative keywords excluded, blacklists and cooldowns
+// applied) and returns the ranked list, best first.
+func (s *Service) PreviewCandidates(results []slskd.SearchResult, track *models.Track) []RankedCandidate {
+	cfg := s.getScoringConfig()
+	cfg.excludeNegative = true
+	picked := scoreCandidates(results, track, s.queries, cfg)
+	out := make([]RankedCandidate, 0, len(picked))
+	for _, c := range picked {
+		out = append(out, RankedCandidate{
+			Username:    c.username,
+			Filename:    c.file.Filename,
+			Size:        c.file.Size,
+			BitRate:     c.file.BitRate,
+			Score:       c.score,
+			HasFreeSlot: c.freeSlot,
+			QueueLength: c.queueLength,
+		})
+	}
+	return out
+}
+
+// SearchQuery returns the canonical "artist title" query for a track.
+func (s *Service) SearchQuery(track *models.Track) string {
+	return track.ArtistName + " " + track.Title
+}
+
+// LogPreviewActivity records a preview lifecycle event in the activity log.
+func (s *Service) LogPreviewActivity(action string, entityID int64, details string) {
+	s.logActivity(action, "track", entityID, details)
+}
+
+// AdoptTransfer records an already-running slskd transfer as a download row
+// so the downloader's tick shepherds it through organize/tag/notify like any
+// other download. source describes who started it (activity log wording).
+func (s *Service) AdoptTransfer(ctx context.Context, trackID int64, username, filename string, size int64, bitrate int, transferID, source string) error {
+	track, err := s.queries.GetTrackWithMeta(trackID)
+	if err != nil {
+		return err
+	}
+
+	_ = s.queries.UpdateTrackDownloadedFrom(trackID, username)
+	_ = s.queries.UpdateTrackDownloadedFilename(trackID, filename)
+
+	ext := strings.ToLower(filepath.Ext(filename))
+	if format := strings.TrimPrefix(ext, "."); format != "" {
+		_ = s.queries.UpdateTrackQuality(trackID, format, bitrate)
+	}
+
+	dlID, err := s.queries.EnqueueDownloadReturningID(trackID)
+	if err != nil {
+		return err
+	}
+	if dlID == 0 {
+		// An active row already exists (partial unique index made the insert
+		// a no-op). Repurpose it: it may be pending/searching for this track.
+		existing, err := s.queries.FindActiveDownloadByTrack(trackID)
+		if err != nil {
+			return err
+		}
+		dlID = existing.ID
+	}
+
+	transferKey := username + "|" + transferID
+	_ = s.queries.UpdateDownloadStatus(dlID, models.DownloadStatusDownloading, &transferKey, nil)
+	_ = s.queries.UpdateTrackStatus(trackID, models.TrackStatusDownloading)
+
+	s.logActivity("download_started", "track", trackID,
+		fmt.Sprintf("%s: %s - %s from %s", source, track.ArtistName, track.Title, username))
+	return nil
+}

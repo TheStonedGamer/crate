@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"errors"
 	"time"
 
 	"github.com/TheOutdoorProgrammer/crate/internal/models"
@@ -732,6 +733,29 @@ func (q *Queries) EnqueueDownloadReturningID(trackID int64) (int64, error) {
 	}
 	id, _ := result.LastInsertId()
 	return id, nil
+}
+
+// FindActiveDownloadByTrack returns the download row currently occupying the
+// track's active slot (pending/searching/downloading/organizing), if any.
+// Used by preview adoption: EnqueueDownloadReturningID is a no-op when a row
+// already exists, so the adopter needs this to find and repurpose that row.
+func (q *Queries) FindActiveDownloadByTrack(trackID int64) (*models.DownloadQueueItem, error) {
+	row := q.db.QueryRow(
+		`SELECT d.id, d.track_id, d.slskd_search_id, d.status, d.attempts, d.last_attempt, d.error, d.next_retry_at, d.source, d.last_progress_bytes, d.created_at
+		 FROM download_queue d
+		 WHERE d.track_id = ? AND d.status IN ('pending', 'searching', 'downloading', 'organizing')
+		 ORDER BY d.created_at DESC LIMIT 1`,
+		trackID,
+	)
+	var item models.DownloadQueueItem
+	if err := row.Scan(&item.ID, &item.TrackID, &item.SlskdSearchID, &item.Status, &item.Attempts,
+		&item.LastAttempt, &item.Error, &item.NextRetryAt, &item.Source, &item.LastProgressBytes, &item.CreatedAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, sql.ErrNoRows
+		}
+		return nil, err
+	}
+	return &item, nil
 }
 
 func (q *Queries) ListDownloads(status string) ([]models.DownloadQueueItem, error) {

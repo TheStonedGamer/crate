@@ -17,6 +17,7 @@ import (
 	"github.com/TheOutdoorProgrammer/crate/internal/provider"
 	"github.com/TheOutdoorProgrammer/crate/internal/services/downloader"
 	"github.com/TheOutdoorProgrammer/crate/internal/services/importer"
+	"github.com/TheOutdoorProgrammer/crate/internal/services/preview"
 	"github.com/TheOutdoorProgrammer/crate/internal/services/reject"
 )
 
@@ -25,6 +26,7 @@ type Server struct {
 	providers   *provider.Manager
 	cache       *cache.Cache
 	downloader  *downloader.Service
+	preview     *preview.Service
 	activityLog *activity.Log
 	importer    *importer.Service
 	reject      *reject.Service
@@ -36,12 +38,13 @@ type Server struct {
 	version     string
 }
 
-func NewServer(queries *db.Queries, providers *provider.Manager, c *cache.Cache, dl *downloader.Service, actLog *activity.Log, frontendFS fs.FS, libraryDir string, version string) *Server {
+func NewServer(queries *db.Queries, providers *provider.Manager, c *cache.Cache, dl *downloader.Service, pv *preview.Service, actLog *activity.Log, frontendFS fs.FS, libraryDir string, version string) *Server {
 	s := &Server{
 		queries:     queries,
 		providers:   providers,
 		cache:       c,
 		downloader:  dl,
+		preview:     pv,
 		activityLog: actLog,
 		importer:    importer.NewService(queries, libraryDir, actLog),
 		reject:      reject.NewService(queries, libraryDir, actLog),
@@ -123,6 +126,12 @@ func (s *Server) setupRouter() chi.Router {
 			r.Delete("/{id}/search/{searchId}", s.handleDeleteManualSearch)
 			r.Post("/{id}/download", s.handleManualDownload)
 			r.Post("/{id}/reject", s.handleRejectTrack)
+			r.Post("/{id}/preview/start", s.handlePreviewStart)
+			r.Get("/{id}/preview/status", s.handlePreviewStatus)
+			r.Get("/{id}/preview/stream", s.handlePreviewStream)
+			r.Post("/{id}/preview/keep", s.handlePreviewKeep)
+			r.Post("/{id}/preview/reject", s.handlePreviewReject)
+			r.Delete("/{id}/preview", s.handlePreviewCancel)
 			r.Put("/{id}/ignore", s.handleIgnoreTrack)
 			r.Delete("/{id}/ignore", s.handleUnignoreTrack)
 		})

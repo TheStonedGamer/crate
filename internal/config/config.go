@@ -17,6 +17,10 @@ type Config struct {
 	SlskdURL    string
 	SlskdAPIKey string
 
+	// SlskdIncompleteDir is the slskd incomplete directory, mounted into the
+	// crate container. Preview streaming reads partial transfer bytes from it.
+	SlskdIncompleteDir string
+
 	Providers            string
 	MusicBrainzUserAgent string
 
@@ -35,6 +39,7 @@ func Load() *Config {
 		ScanInterval:             parseDuration(envOr("CRATE_SCAN_INTERVAL", "6h")),
 		SlskdURL:                 envOr("CRATE_SLSKD_URL", "http://localhost:5030"),
 		SlskdAPIKey:              os.Getenv("CRATE_SLSKD_API_KEY"),
+		SlskdIncompleteDir:       envOr("CRATE_SLSKD_INCOMPLETE_DIR", ""),
 		Providers:                envOr("CRATE_PROVIDERS", "musicbrainz:./provider-musicbrainz:50051,deezer:./provider-deezer:50052"),
 		MusicBrainzUserAgent:     envOr("CRATE_MB_USER_AGENT", "Crate/0.1.0 (https://github.com/TheOutdoorProgrammer/crate)"),
 		DownloadFormatPreference: []string{"flac", "mp3"},

@@ -25,6 +25,7 @@ import (
 	"github.com/TheOutdoorProgrammer/crate/internal/models"
 	"github.com/TheOutdoorProgrammer/crate/internal/provider"
 	"github.com/TheOutdoorProgrammer/crate/internal/services/downloader"
+	"github.com/TheOutdoorProgrammer/crate/internal/services/preview"
 	"github.com/TheOutdoorProgrammer/crate/internal/services/slskd"
 	pb "github.com/TheOutdoorProgrammer/crate/proto/provider"
 )
@@ -74,8 +75,9 @@ func newTestEnv(t *testing.T) *testEnv {
 	slskdClient := slskd.NewClient(fakeSlskd.URL, "test-key")
 	org := &noopOrganizer{}
 	dl := downloader.NewService(queries, slskdClient, org, actLog)
+	pv := preview.NewService(queries, slskdClient, dl, t.TempDir())
 
-	srv := api.NewServer(queries, providerMgr, c, dl, actLog, nil, "/music", "test")
+	srv := api.NewServer(queries, providerMgr, c, dl, pv, actLog, nil, "/music", "test")
 
 	return &testEnv{
 		server:      srv,
@@ -2465,8 +2467,9 @@ func newTestEnvWithLibrary(t *testing.T, libraryDir string) *testEnv {
 	slskdClient := slskd.NewClient(fakeSlskd.URL, "test-key")
 	org := &noopOrganizer{}
 	dl := downloader.NewService(queries, slskdClient, org, actLog)
+	pv := preview.NewService(queries, slskdClient, dl, t.TempDir())
 
-	srv := api.NewServer(queries, providerMgr, c, dl, actLog, nil, libraryDir, "test")
+	srv := api.NewServer(queries, providerMgr, c, dl, pv, actLog, nil, libraryDir, "test")
 
 	return &testEnv{
 		server:      srv,

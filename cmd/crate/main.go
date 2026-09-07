@@ -21,6 +21,7 @@ import (
 	"github.com/TheOutdoorProgrammer/crate/internal/services/musicassistant"
 	"github.com/TheOutdoorProgrammer/crate/internal/services/navidrome"
 	"github.com/TheOutdoorProgrammer/crate/internal/services/organizer"
+	"github.com/TheOutdoorProgrammer/crate/internal/services/preview"
 	"github.com/TheOutdoorProgrammer/crate/internal/services/reject"
 	"github.com/TheOutdoorProgrammer/crate/internal/services/scheduler"
 	"github.com/TheOutdoorProgrammer/crate/internal/services/slskd"
@@ -65,7 +66,11 @@ func main() {
 	org := organizer.NewService(queries, cfg.DownloadsDir, cfg.LibraryPath)
 	dl := downloader.NewService(queries, slskdClient, org, actLog)
 	dl.AddNotifier(navidrome.NewClient(queries))
-	server := api.NewServer(queries, providerMgr, providerCache, dl, actLog, frontendFS, cfg.LibraryPath, Version)
+	pv := preview.NewService(queries, slskdClient, dl, cfg.SlskdIncompleteDir)
+	if !pv.Configured() {
+		slog.Warn("preview disabled: CRATE_SLSKD_INCOMPLETE_DIR not set; mount slskd's incomplete dir to enable")
+	}
+	server := api.NewServer(queries, providerMgr, providerCache, dl, pv, actLog, frontendFS, cfg.LibraryPath, Version)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -88,6 +93,10 @@ func main() {
 	}
 
 	go dl.Run(ctx, 10*time.Second)
+
+	// Preview session janitor: cancels expired preview transfers and reaps
+	// idle sessions so nothing lingers in slskd's queue.
+	go pv.Run(ctx)
 
 	sched := scheduler.NewService(queries, providerMgr, actLog, cfg.LibraryPath, cfg.ScanInterval)
 	go sched.Run(ctx)
