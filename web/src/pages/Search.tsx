@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { formatFans } from '../lib/format';
-import type { ArtistSearchResult, ProviderInfo } from '../types/index';
+import type { ArtistSearchResult, ProviderInfo, SongSearchResult } from '../types/index';
 
 const PAGE_SIZE = 25;
 const COUNTRIES = [['', 'All countries'], ['US', 'United States'], ['GB', 'United Kingdom'], ['CA', 'Canada'], ['AU', 'Australia'], ['DE', 'Germany'], ['FR', 'France'], ['JP', 'Japan'], ['KR', 'South Korea'], ['BR', 'Brazil'], ['MX', 'Mexico'], ['SE', 'Sweden'], ['IE', 'Ireland'], ['NL', 'Netherlands'], ['NO', 'Norway'], ['ES', 'Spain'], ['IT', 'Italy']] as const;
@@ -31,6 +31,7 @@ export default function Search() {
 
   const defaultProvider = settings?.provider_primary || 'musicbrainz';
   const activeProvider = provider || defaultProvider;
+  const isSongSearch = submitted.includes(' - ');
 
   const activeProviderInfo = providers?.find((p: ProviderInfo) => p.name === activeProvider);
   const providerLabel = activeProviderInfo?.display_name || activeProvider;
@@ -38,11 +39,17 @@ export default function Search() {
   const { data: searchData, isLoading } = useQuery({
     queryKey: ['search', submitted, activeProvider, country],
     queryFn: () => api.search(submitted, activeProvider, PAGE_SIZE, 0, country),
-    enabled: !!submitted,
+    enabled: !!submitted && !isSongSearch,
+  });
+  const { data: songData, isLoading: songsLoading } = useQuery({
+    queryKey: ['song-search', submitted, activeProvider],
+    queryFn: () => api.searchTracks(submitted, activeProvider),
+    enabled: !!submitted && isSongSearch,
   });
 
   const artists = [...(searchData?.artists || []), ...extraArtists];
   const total = searchData?.total ?? 0;
+  const songs = (songData?.tracks || []) as SongSearchResult[];
 
   const loadMore = useCallback(async () => {
     if (loadingMore || offset >= total) return;
@@ -160,7 +167,19 @@ export default function Search() {
         </div>
       )}
 
-      {artists.length > 0 && (
+      {songsLoading && <div className="text-sm text-zinc-500 py-8 text-center">Searching songs...</div>}
+      {isSongSearch && !songsLoading && songs.length > 0 && (
+        <div className="space-y-1">
+          {songs.map((song) => (
+            <div key={`${song.artist_id}-${song.id}`} className="flex items-center gap-3 bg-zinc-800/40 rounded-lg p-2.5">
+              <div className="w-11 h-11 rounded bg-zinc-700 overflow-hidden shrink-0">{song.album_cover_url && <img src={song.album_cover_url} alt="" className="w-full h-full object-cover" />}</div>
+              <div className="min-w-0 flex-1"><p className="font-medium text-sm truncate">{song.title}</p><p className="text-xs text-zinc-500 truncate">{song.artist_name}{song.country && ` · ${song.country}`} {song.album_title && ` · ${song.album_title}`}</p></div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!isSongSearch && artists.length > 0 && (
         <div className="space-y-1">
           {artists.map((artist, i) => (
             <Link
@@ -200,8 +219,8 @@ export default function Search() {
         </div>
       )}
 
-      {submitted && !isLoading && artists.length === 0 && (
-        <div className="text-center py-12 text-zinc-500 text-sm">No artists found</div>
+      {submitted && !isLoading && !songsLoading && ((isSongSearch && songs.length === 0) || (!isSongSearch && artists.length === 0)) && (
+        <div className="text-center py-12 text-zinc-500 text-sm">{isSongSearch ? 'No songs found' : 'No artists found'}</div>
       )}
 
       {!submitted && !isLoading && (

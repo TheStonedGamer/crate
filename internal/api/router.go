@@ -85,6 +85,7 @@ func (s *Server) setupRouter() chi.Router {
 		r.Get("/status", s.handleStatus)
 
 		r.Get("/search", s.handleSearch)
+		r.Get("/search/tracks", s.handleSongSearch)
 		r.Get("/library/search", s.handleLibrarySearch)
 
 		r.Route("/browse", func(r chi.Router) {

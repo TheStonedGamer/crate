@@ -112,6 +112,27 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
+// handleSongSearch resolves "song - artist" through the provider catalog,
+// retaining the artist country so same-name artists remain distinguishable.
+func (s *Server) handleSongSearch(w http.ResponseWriter, r *http.Request) {
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	providerName := r.URL.Query().Get("provider")
+	if query == "" || providerName == "" { writeError(w, http.StatusBadRequest, "q and provider are required"); return }
+	parts := strings.Split(query, " - ")
+	trackQuery, artistQuery := query, query
+	if len(parts) >= 2 { trackQuery, artistQuery = strings.TrimSpace(parts[0]), strings.TrimSpace(parts[len(parts)-1]) }
+	artists, err := s.providers.SearchWithProvider(r.Context(), providerName, artistQuery, 10, 0)
+	if err != nil { writeError(w, http.StatusInternalServerError, "artist search failed"); return }
+	type songResult struct { ID, Title, AlbumID, AlbumTitle, AlbumCoverURL string; DurationMs, AlbumYear int32; ArtistID, ArtistName, Country string }
+	results := make([]songResult, 0)
+	for _, artist := range artists.Artists {
+		tracks, trackErr := s.providers.SearchArtistTracks(r.Context(), providerName, artist.Id, trackQuery, 25)
+		if trackErr != nil { continue }
+		for _, track := range tracks.Tracks { results = append(results, songResult{track.Id, track.Title, track.AlbumId, track.AlbumTitle, track.AlbumCoverUrl, track.DurationMs, track.AlbumYear, artist.Id, artist.Name, artist.Metadata["country"]}) }
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"tracks": results})
+}
+
 func (s *Server) handleLibrarySearch(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query().Get("q")
 	if query == "" {

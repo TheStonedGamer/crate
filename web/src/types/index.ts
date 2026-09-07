@@ -73,6 +73,8 @@ export interface ArtistSearchResult {
   rank: number;
   metadata?: Record<string, string>;
 }
+export interface SongSearchResult { id: string; title: string; album_id: string; album_title: string; album_cover_url: string; duration_ms: number; album_year: number; artist_id: string; artist_name: string; country: string; }
+export interface SongSearchResponse { tracks: SongSearchResult[]; }
 
 export interface BrowseArtistResult {
   id: string;

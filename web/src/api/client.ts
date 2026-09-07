@@ -1,4 +1,4 @@
-import type { Artist, Album, Track, SearchResponse, BrowseArtistResult, BrowseAlbumDetail, DownloadQueueItem, DownloadProgress, SystemStatus, ProviderInfo, ActivityResponse, ManualSearchStart, ManualSearchResponse, LibrarySearchResult, TrackSearchResult, BlacklistEntry, UserCooldown, ImportState, PreviewStatus } from '../types/index';
+import type { Artist, Album, Track, SearchResponse, BrowseArtistResult, BrowseAlbumDetail, DownloadQueueItem, DownloadProgress, SystemStatus, ProviderInfo, ActivityResponse, ManualSearchStart, ManualSearchResponse, LibrarySearchResult, TrackSearchResult, BlacklistEntry, UserCooldown, ImportState, PreviewStatus, SongSearchResponse } from '../types/index';
 
 const BASE = '/api';
 
@@ -18,6 +18,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 export const api = {
   search: (q: string, provider?: string, limit = 25, offset = 0, country?: string) =>
     request<SearchResponse>(`/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}${provider ? `&provider=${encodeURIComponent(provider)}` : ''}${country ? `&country=${encodeURIComponent(country)}` : ''}`),
+  searchTracks: (q: string, provider: string) => request<SongSearchResponse>(`/search/tracks?q=${encodeURIComponent(q)}&provider=${encodeURIComponent(provider)}`),
 
   browseArtist: (id: string, provider?: string) =>
     request<BrowseArtistResult>(`/browse/artist/${id}${provider ? `?provider=${encodeURIComponent(provider)}` : ''}`),
