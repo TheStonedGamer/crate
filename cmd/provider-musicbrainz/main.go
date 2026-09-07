@@ -307,11 +307,11 @@ func (s *server) SearchArtistTracks(ctx context.Context, req *pb.ArtistTrackSear
 		} `json:"recordings"`
 	}
 
-	query := "recording:" + url.QueryEscape(req.Query)
+	query := "recording:" + req.Query
 	if req.ArtistId != "" {
 		query = fmt.Sprintf("arid:%s AND %s", req.ArtistId, query)
 	}
-	path := fmt.Sprintf("/recording/?query=%s&limit=%d&fmt=json", query, limit)
+	path := fmt.Sprintf("/recording/?query=%s&limit=%d&fmt=json", url.QueryEscape(query), limit)
 	if err := s.get(ctx, path, &resp); err != nil {
 		return nil, err
 	}
