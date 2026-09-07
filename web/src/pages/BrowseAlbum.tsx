@@ -4,8 +4,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { useToast } from '../components/Toast';
 import MetadataPills from '../components/MetadataPills';
+import PreviewPanel from '../components/PreviewPanel';
 import { formatDuration, formatTotalDuration } from '../lib/format';
-import type { BrowseTrackResult } from '../types/index';
+import type { BrowseTrackResult, PreviewStatus } from '../types/index';
 
 export default function BrowseAlbum() {
   const { id } = useParams<{ id: string }>();
@@ -14,6 +15,13 @@ export default function BrowseAlbum() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [localWatchedTracks, setLocalWatchedTracks] = useState<Set<string>>(new Set());
+
+  // Preview state: the Crate track id with a live panel + its opening status.
+  // previewBrowseKey ties the panel to the browse row (provider string id)
+  // since previewTrackId is the numeric Crate id.
+  const [previewTrackId, setPreviewTrackId] = useState<number | null>(null);
+  const [previewInitial, setPreviewInitial] = useState<PreviewStatus | null>(null);
+  const [previewBrowseKey, setPreviewBrowseKey] = useState<string | null>(null);
 
   const artistID = searchParams.get('artist_id') || '';
   const artistName = searchParams.get('artist_name') || '';
@@ -25,6 +33,13 @@ export default function BrowseAlbum() {
     queryFn: () => api.browseAlbum(id!, providerOverride),
     enabled: !!id,
   });
+
+  const { data: systemStatus } = useQuery({
+    queryKey: ['status'],
+    queryFn: () => api.getStatus(),
+    staleTime: 60_000,
+  });
+  const previewEnabled = systemStatus?.preview_enabled ?? false;
 
   const watchAlbum = useMutation({
     mutationFn: () =>
@@ -63,6 +78,41 @@ export default function BrowseAlbum() {
     },
     onError: (err: Error) => toast(err.message, 'error'),
   });
+
+  // Preview from browse: watch the track first (creating artist/album/track
+  // rows and getting the numeric id — the backend returns the existing row
+  // when already watched), then start the preview session on it.
+  const startPreview = async (track: BrowseTrackResult) => {
+    if (previewTrackId !== null) {
+      // Toggling away: the old panel's unmount effect cancels its transfer.
+      setPreviewTrackId(null);
+      setPreviewInitial(null);
+      setPreviewBrowseKey(null);
+    }
+    try {
+      const watched = await api.watchTrack(track.id, {
+        artist_provider_id: artistID,
+        artist_name: artistName,
+        artist_image_url: artistImageURL,
+        album_provider_id: id,
+        album_title: album!.title,
+        album_cover_url: album!.cover_url,
+        album_year: album!.year || null,
+        title: track.title,
+        track_number: track.track_number,
+        disc_number: track.disc_number,
+        duration_ms: track.duration_ms,
+        provider: providerOverride,
+      });
+      const st = await api.startPreview(watched.id);
+      setLocalWatchedTracks((prev) => new Set(prev).add(track.id));
+      setPreviewInitial(st);
+      setPreviewTrackId(watched.id);
+      setPreviewBrowseKey(track.id);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Preview failed', 'error');
+    }
+  };
 
   if (isLoading) {
     return (
@@ -128,28 +178,51 @@ export default function BrowseAlbum() {
               const serverWatched = album.watched_track_ids?.includes(track.id);
               const isWatched = serverWatched || localWatchedTracks.has(track.id);
               return (
-                <div
-                  key={track.id}
-                  className="flex items-center gap-2.5 px-2.5 py-2 border-b border-zinc-800/50 last:border-0"
-                >
-                  <span className="text-[11px] text-zinc-600 w-5 text-right shrink-0 tabular-nums">
-                    {track.track_number}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm truncate">{track.title}</p>
-                    <p className="text-[11px] text-zinc-600 tabular-nums">{formatDuration(track.duration_ms)}</p>
+                <div key={track.id}>
+                  <div className="flex items-center gap-2.5 px-2.5 py-2 border-b border-zinc-800/50 last:border-0">
+                    <span className="text-[11px] text-zinc-600 w-5 text-right shrink-0 tabular-nums">
+                      {track.track_number}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm truncate">{track.title}</p>
+                      <p className="text-[11px] text-zinc-600 tabular-nums">{formatDuration(track.duration_ms)}</p>
+                    </div>
+                    {previewEnabled && (
+                      <button
+                        onClick={() => startPreview(track)}
+                        className={`shrink-0 transition-colors ${
+                          previewBrowseKey === track.id ? 'text-green-400' : 'text-zinc-500 active:text-green-400'
+                        }`}
+                        title="Preview before downloading"
+                      >
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                          <path d="M8 5.14v13.72c0 .93 1 1.5 1.78 1l10.7-6.86a1.2 1.2 0 0 0 0-2L9.78 4.13A1.17 1.17 0 0 0 8 5.14Z" />
+                        </svg>
+                      </button>
+                    )}
+                    {isWatched ? (
+                      <svg className="w-5 h-5 text-green-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    ) : (
+                      <button
+                        onClick={() => watchTrack.mutate(track)}
+                        className="px-2.5 py-1 rounded text-xs font-medium transition-colors shrink-0 bg-zinc-700 text-zinc-200 active:bg-zinc-600"
+                      >
+                        Watch
+                      </button>
+                    )}
                   </div>
-                  {isWatched ? (
-                    <svg className="w-5 h-5 text-green-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                  ) : (
-                    <button
-                      onClick={() => watchTrack.mutate(track)}
-                      className="px-2.5 py-1 rounded text-xs font-medium transition-colors shrink-0 bg-zinc-700 text-zinc-200 active:bg-zinc-600"
-                    >
-                      Watch
-                    </button>
+                  {previewTrackId !== null && previewInitial && previewBrowseKey === track.id && (
+                    <PreviewPanel
+                      trackId={previewTrackId}
+                      initialStatus={previewInitial}
+                      onClose={() => {
+                        setPreviewTrackId(null);
+                        setPreviewInitial(null);
+                        setPreviewBrowseKey(null);
+                      }}
+                    />
                   )}
                 </div>
               );

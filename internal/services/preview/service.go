@@ -401,23 +401,6 @@ func (s *Service) PartialPath(username, remoteFilename string) (string, error) {
 	return filepath.Join(append([]string{s.incompleteDir, sanitizeSegment(username)}, clean...)...), nil
 }
 
-// BrowseRequest is the payload for starting a preview for a browse page track
-// that may not exist in the DB yet. It mirrors handleWatchTrack's body.
-type BrowseRequest struct {
-	Provider         string `json:"provider,omitempty"`
-	ProviderID       string `json:"provider_id"`
-	ArtistProviderID string `json:"artist_provider_id"`
-	ArtistName       string `json:"artist_name"`
-	ArtistImageURL   string `json:"artist_image_url"`
-	AlbumProviderID  string `json:"album_provider_id"`
-	AlbumTitle       string `json:"album_title"`
-	AlbumYear        *int   `json:"album_year"`
-	Title            string `json:"title"`
-	TrackNumber      int    `json:"track_number"`
-	DiscNumber       int    `json:"disc_number"`
-	DurationMs       int    `json:"duration_ms"`
-}
-
 // sanitizeSegment applies slskd's Unix SanitizePathSegment: NUL and slash
 // become underscore; "."/".." collapse to a single underscore.
 func sanitizeSegment(seg string) string {

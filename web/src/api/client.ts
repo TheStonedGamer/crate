@@ -1,4 +1,4 @@
-import type { Artist, Album, Track, SearchResponse, BrowseArtistResult, BrowseAlbumDetail, DownloadQueueItem, DownloadProgress, SystemStatus, ProviderInfo, ActivityResponse, ManualSearchStart, ManualSearchResponse, LibrarySearchResult, TrackSearchResult, BlacklistEntry, UserCooldown, ImportState } from '../types/index';
+import type { Artist, Album, Track, SearchResponse, BrowseArtistResult, BrowseAlbumDetail, DownloadQueueItem, DownloadProgress, SystemStatus, ProviderInfo, ActivityResponse, ManualSearchStart, ManualSearchResponse, LibrarySearchResult, TrackSearchResult, BlacklistEntry, UserCooldown, ImportState, PreviewStatus } from '../types/index';
 
 const BASE = '/api';
 
@@ -154,4 +154,18 @@ export const api = {
   deleteCooldown: (id: number) =>
     request<void>(`/cooldowns/${id}`, { method: 'DELETE' }),
   clearCooldowns: () => request<void>('/cooldowns', { method: 'DELETE' }),
+
+  // Preview-before-download. For browse-page tracks the frontend calls
+  // watchTrack first (which creates the entities and returns the numeric id),
+  // then startPreview on that id.
+  startPreview: (trackId: number) =>
+    request<PreviewStatus>(`/tracks/${trackId}/preview/start`, { method: 'POST' }),
+  previewStatus: (trackId: number) =>
+    request<PreviewStatus>(`/tracks/${trackId}/preview/status`),
+  keepPreview: (trackId: number) =>
+    request<{ status: string }>(`/tracks/${trackId}/preview/keep`, { method: 'POST' }),
+  rejectPreview: (trackId: number) =>
+    request<PreviewStatus | { status: 'exhausted' }>(`/tracks/${trackId}/preview/reject`, { method: 'POST' }),
+  cancelPreview: (trackId: number) =>
+    request<void>(`/tracks/${trackId}/preview`, { method: 'DELETE' }),
 };

@@ -91,7 +91,12 @@ func (s *Service) ServeFile(w http.ResponseWriter, r *http.Request, trackID int6
 		return s.serveRange(w, f, rng, onDisk, total)
 	}
 
-	w.Header().Set("Content-Length", strconv.FormatInt(total, 10))
+	// Advertise only what we can actually serve: a Content-Length larger than
+	// the body we write makes Chrome abort with ERR_CONTENT_LENGTH_MISMATCH.
+	// The browser learns the full total from the first 206 Content-Range
+	// (bytes x-y/total) and keeps issuing Range requests as bytes land, so the
+	// seek bar still spans the whole file.
+	w.Header().Set("Content-Length", strconv.FormatInt(onDisk, 10))
 	w.WriteHeader(http.StatusOK)
 	_, copyErr := io.Copy(w, io.LimitReader(f, onDisk))
 	if copyErr != nil {

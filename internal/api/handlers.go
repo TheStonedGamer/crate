@@ -516,6 +516,15 @@ func (s *Server) handleWatchTrack(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Idempotent: if this provider track is already watched (e.g. it was
+	// watched earlier in this browse session), return it so the caller gets
+	// the numeric id it needs. The preview flow relies on this: watch-track
+	// then preview-start works for both new and existing rows.
+	if existing, err := s.queries.FindTrackByProvider(primary, providerID); err == nil {
+		writeJSON(w, http.StatusOK, existing)
+		return
+	}
+
 	track := &models.Track{
 		AlbumID:     album.ID,
 		Title:       req.Title,

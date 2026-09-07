@@ -517,8 +517,11 @@ func TestStreamServesPartialBytes(t *testing.T) {
 	if got := w.Header().Get("Accept-Ranges"); got != "bytes" {
 		t.Errorf("Accept-Ranges = %q", got)
 	}
-	if got := w.Header().Get("Content-Length"); got != fmt.Sprint(1<<20) {
-		t.Errorf("Content-Length = %q, want full transfer size", got)
+	// The 200 path advertises only the bytes it can actually serve; the full
+	// total is revealed by the first 206 Content-Range (browser keeps issuing
+	// Range requests as the transfer grows).
+	if got := w.Header().Get("Content-Length"); got != "10" {
+		t.Errorf("Content-Length = %q, want on-disk size", got)
 	}
 	body, _ := io.ReadAll(w.Body)
 	if string(body) != "0123456789" {

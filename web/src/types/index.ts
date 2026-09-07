@@ -135,6 +135,7 @@ export interface SystemStatus {
   owned_tracks?: number;
   pending_downloads: number;
   active_downloads: number;
+  preview_enabled?: boolean;
 }
 
 export interface SearchResponse {
@@ -249,4 +250,19 @@ export interface ImportState {
   total: number;
   report?: ImportReport;
   error?: string;
+}
+
+// Preview-before-download: a live session streaming the actual partial bytes
+// of the slskd transfer while it downloads.
+export interface PreviewStatus {
+  track_id: number;
+  username: string;
+  filename: string;
+  size: number;
+  bit_rate: number;
+  bytes_received: number;
+  percent: number;
+  state: 'buffering' | 'downloading' | 'completed' | 'failed';
+  error?: string;
+  candidates: number; // remaining sources after the current one
 }

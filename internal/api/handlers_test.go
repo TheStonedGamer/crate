@@ -439,7 +439,7 @@ func TestBrowseAlbumWatchedStatus(t *testing.T) {
 		"album_title": "Album One",
 		"album_cover_url": "",
 		"album_year": 2023,
-		"title": "Track One",
+		"title": "Track A1",
 		"track_number": 1,
 		"disc_number": 1,
 		"duration_ms": 200000
@@ -2677,5 +2677,175 @@ func TestRejectTrackDeletesFile(t *testing.T) {
 
 	if _, err := os.Stat(fullPath); !os.IsNotExist(err) {
 		t.Error("expected file to be deleted after reject")
+	}
+}
+
+// --- Preview API ---
+
+func TestWatchTrackIsIdempotent(t *testing.T) {
+	env := newTestEnv(t)
+	body := `{
+		"artist_provider_id": "1000",
+		"artist_name": "Test Artist",
+		"artist_image_url": "",
+		"album_provider_id": "2000",
+		"album_title": "Album One",
+		"album_cover_url": "",
+		"album_year": 2023,
+		"title": "Track A1",
+		"track_number": 1,
+		"disc_number": 1,
+		"duration_ms": 200000
+	}`
+	w := env.do("POST", "/api/watch/track/3000", body)
+	if w.Code != 201 {
+		t.Fatalf("first watch: expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+	first := decode[map[string]any](t, w)
+
+	// Watch the same provider track again: same row returned (200), no dup.
+	w = env.do("POST", "/api/watch/track/3000", body)
+	if w.Code != 200 {
+		t.Fatalf("second watch: expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	second := decode[map[string]any](t, w)
+	if first["id"] != second["id"] {
+		t.Errorf("idempotent watch returned different ids: %v vs %v", first["id"], second["id"])
+	}
+	tracks, err := env.queries.ListTracksByAlbum(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = tracks
+}
+
+func TestStatusReportsPreviewEnabled(t *testing.T) {
+	env := newTestEnv(t)
+	w := env.do("GET", "/api/status", "")
+	if w.Code != 200 {
+		t.Fatalf("status: %d", w.Code)
+	}
+	result := decode[map[string]any](t, w)
+	if result["preview_enabled"] != true {
+		t.Errorf("preview_enabled = %v, want true (test env wires a temp incomplete dir)", result["preview_enabled"])
+	}
+}
+
+func TestPreviewEndpointsSessionFlow(t *testing.T) {
+	env := newTestEnv(t)
+
+	// Watch a track and start a preview on it.
+	w := env.do("POST", "/api/watch/track/3000", `{
+		"artist_provider_id": "1000",
+		"artist_name": "Test Artist",
+		"artist_image_url": "",
+		"album_provider_id": "2000",
+		"album_title": "Album One",
+		"album_cover_url": "",
+		"album_year": 2023,
+		"title": "Track A1",
+		"track_number": 1,
+		"disc_number": 1,
+		"duration_ms": 200000
+	}`)
+	if w.Code != 201 {
+		t.Fatalf("watch track: %d %s", w.Code, w.Body.String())
+	}
+	track := decode[struct {
+		ID int64 `json:"id"`
+	}](t, w)
+
+	w = env.do("POST", fmt.Sprintf("/api/tracks/%d/preview/start", track.ID), "")
+	if w.Code != 200 {
+		t.Fatalf("preview start: %d %s", w.Code, w.Body.String())
+	}
+	st := decode[struct {
+		Username   string `json:"username"`
+		State      string `json:"state"`
+		Candidates int    `json:"candidates"`
+	}](t, w)
+	if st.Username != "user1" {
+		t.Errorf("username = %q, want user1", st.Username)
+	}
+	if st.State != "buffering" {
+		t.Errorf("state = %q", st.State)
+	}
+	if st.Candidates != 2 {
+		t.Errorf("candidates = %d, want 2 (three files across two users)", st.Candidates)
+	}
+
+	// Status.
+	w = env.do("GET", fmt.Sprintf("/api/tracks/%d/preview/status", track.ID), "")
+	if w.Code != 200 {
+		t.Fatalf("preview status: %d %s", w.Code, w.Body.String())
+	}
+
+	// Keep: adopts the transfer as a download row.
+	w = env.do("POST", fmt.Sprintf("/api/tracks/%d/preview/keep", track.ID), "")
+	if w.Code != 200 {
+		t.Fatalf("preview keep: %d %s", w.Code, w.Body.String())
+	}
+	dl, err := env.queries.FindActiveDownloadByTrack(track.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dl.Status != "downloading" {
+		t.Errorf("download status = %q", dl.Status)
+	}
+	// Session gone.
+	w = env.do("GET", fmt.Sprintf("/api/tracks/%d/preview/status", track.ID), "")
+	if w.Code != 404 {
+		t.Errorf("status after keep: %d, want 404", w.Code)
+	}
+}
+
+func TestPreviewEndpointsRejectExhausts(t *testing.T) {
+	env := newTestEnv(t)
+
+	w := env.do("POST", "/api/watch/track/3000", `{
+		"artist_provider_id": "1000",
+		"artist_name": "Test Artist",
+		"artist_image_url": "",
+		"album_provider_id": "2000",
+		"album_title": "Album One",
+		"album_cover_url": "",
+		"album_year": 2023,
+		"title": "Track A1",
+		"track_number": 1,
+		"disc_number": 1,
+		"duration_ms": 200000
+	}`)
+	track := decode[struct {
+		ID int64 `json:"id"`
+	}](t, w)
+
+	w = env.do("POST", fmt.Sprintf("/api/tracks/%d/preview/start", track.ID), "")
+	if w.Code != 200 {
+		t.Fatalf("preview start: %d %s", w.Code, w.Body.String())
+	}
+
+	// Three files: flac (user1), mp3 (user1), mp3 (user2). Reject all three;
+	// the last must report exhausted.
+	var last map[string]any
+	for i := 0; i < 3; i++ {
+		w = env.do("POST", fmt.Sprintf("/api/tracks/%d/preview/reject", track.ID), "")
+		if w.Code != 200 {
+			t.Fatalf("reject %d: %d %s", i, w.Code, w.Body.String())
+		}
+		last = decode[map[string]any](t, w)
+	}
+	if last["status"] != "exhausted" {
+		t.Errorf("last reject = %v, want exhausted", last)
+	}
+
+	// Session gone.
+	w = env.do("GET", fmt.Sprintf("/api/tracks/%d/preview/status", track.ID), "")
+	if w.Code != 404 {
+		t.Errorf("status after exhaustion: %d, want 404", w.Code)
+	}
+	// Blacklisted source remains visible in the blacklist API.
+	w = env.do("GET", "/api/blacklist", "")
+	if w.Code != 200 {
+		t.Fatalf("blacklist: %d", w.Code)
 	}
 }

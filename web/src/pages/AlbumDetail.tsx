@@ -8,7 +8,8 @@ import FilterBar from '../components/FilterBar';
 import DetailSheet, { DetailRow } from '../components/DetailSheet';
 import ProviderBadge from '../components/ProviderBadge';
 import ProgressBar from '../components/ProgressBar';
-import type { ManualSearchResult, Track, Album } from '../types/index';
+import PreviewPanel from '../components/PreviewPanel';
+import type { ManualSearchResult, PreviewStatus, Track, Album } from '../types/index';
 
 export default function AlbumDetail() {
   const { id } = useParams<{ id: string }>();
@@ -143,6 +144,36 @@ export default function AlbumDetail() {
   const [manualSearchComplete, setManualSearchComplete] = useState(false);
   const [manualFileCount, setManualFileCount] = useState(0);
   const [manualQuery, setManualQuery] = useState('');
+
+  // Preview-before-download: the track id with a live panel, and the status
+  // the panel was opened with.
+  const [previewTrackId, setPreviewTrackId] = useState<number | null>(null);
+  const [previewInitial, setPreviewInitial] = useState<PreviewStatus | null>(null);
+
+  const { data: systemStatus } = useQuery({
+    queryKey: ['status'],
+    queryFn: () => api.getStatus(),
+    staleTime: 60_000,
+  });
+  const previewEnabled = systemStatus?.preview_enabled ?? false;
+
+  const startPreview = async (trackId: number) => {
+    if (previewTrackId === trackId) {
+      // Toggle off: the panel's unmount effect cancels the transfer.
+      setPreviewTrackId(null);
+      setPreviewInitial(null);
+      return;
+    }
+    setPreviewTrackId(null);
+    setPreviewInitial(null);
+    try {
+      const st = await api.startPreview(trackId);
+      setPreviewInitial(st);
+      setPreviewTrackId(trackId);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Preview failed', 'error');
+    }
+  };
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const activeSearchRef = useRef<{ trackId: number; searchId: string } | null>(null);
 
@@ -482,6 +513,19 @@ export default function AlbumDetail() {
                     )}
                     {(track.status === 'wanted' || track.status === 'ignored') && (
                       <>
+                        {previewEnabled && track.status !== 'ignored' && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); startPreview(track.id); }}
+                            className={`shrink-0 transition-colors ${
+                              previewTrackId === track.id ? 'text-green-400' : 'text-zinc-500 active:text-green-400'
+                            }`}
+                            title={previewTrackId === track.id ? 'Stop preview' : 'Preview before download'}
+                          >
+                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                              <path d="M8 5.14v13.72c0 .93 1 1.5 1.78 1l10.7-6.86a1.2 1.2 0 0 0 0-2L9.78 4.13A1.17 1.17 0 0 0 8 5.14Z" />
+                            </svg>
+                          </button>
+                        )}
                         <button
                           onClick={(e) => { e.stopPropagation(); queueTrack.mutate(track.id); }}
                           disabled={isQueued || isSearching || track.status === 'ignored'}
@@ -632,6 +676,14 @@ export default function AlbumDetail() {
                         </div>
                       )}
                     </div>
+                  )}
+                  {previewTrackId === track.id && previewInitial && (
+                    <PreviewPanel
+                      trackId={track.id}
+                      initialStatus={previewInitial}
+                      onClose={() => { setPreviewTrackId(null); setPreviewInitial(null); }}
+                      onKept={() => { setPreviewTrackId(null); setPreviewInitial(null); }}
+                    />
                   )}
                   {isLinkOpen && (
                     <div className="bg-amber-900/10 border-b border-amber-800/30 px-3 py-2 animate-fade-in">
