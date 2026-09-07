@@ -72,20 +72,29 @@ type Service struct {
 	slskd         *slskd.Client
 	downloader    *downloader.Service
 	incompleteDir string
+	downloadsDir  string
 
 	mu       sync.Mutex
 	sessions map[int64]*Session // keyed by track ID
+	startMu  sync.Mutex
+	starting map[int64]chan struct{}
 }
 
 // NewService returns a preview service. incompleteDir may be empty, in which
 // case Start fails fast with a "not configured" error rather than reading disk.
-func NewService(queries *db.Queries, client *slskd.Client, dl *downloader.Service, incompleteDir string) *Service {
+func NewService(queries *db.Queries, client *slskd.Client, dl *downloader.Service, incompleteDir string, downloadsDir ...string) *Service {
+	var completedDir string
+	if len(downloadsDir) > 0 {
+		completedDir = downloadsDir[0]
+	}
 	return &Service{
 		queries:       queries,
 		slskd:         client,
 		downloader:    dl,
 		incompleteDir: incompleteDir,
+		downloadsDir:  completedDir,
 		sessions:      make(map[int64]*Session),
+		starting:      make(map[int64]chan struct{}),
 	}
 }
 
@@ -137,21 +146,46 @@ func (s *Service) Start(ctx context.Context, trackID int64) (*Status, error) {
 		return nil, err
 	}
 
-	// Replace any previous preview for this track.
+	// Serialize starts per track. A concurrent caller waits for the first
+	// search/enqueue to finish, then receives the resulting session.
+	s.startMu.Lock()
+	if done, exists := s.starting[trackID]; exists {
+		s.startMu.Unlock()
+		select {
+		case <-done:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+		s.mu.Lock()
+		sess, ok := s.sessions[trackID]
+		s.mu.Unlock()
+		if ok {
+			return s.statusFor(sess, "buffering", nil), nil
+		}
+		return nil, errors.New("preview start did not produce a session")
+	}
+	done := make(chan struct{})
+	s.starting[trackID] = done
+	s.startMu.Unlock()
+	defer func() { s.startMu.Lock(); delete(s.starting, trackID); close(done); s.startMu.Unlock() }()
+
+	// Existing sessions are idempotent; do not enqueue a duplicate transfer.
 	s.mu.Lock()
-	_, hadOld := s.sessions[trackID]
+	sess, hadOld := s.sessions[trackID]
 	s.mu.Unlock()
 	if hadOld {
-		s.Cancel(ctx, trackID)
+		return s.statusFor(sess, "buffering", nil), nil
 	}
 
 	search, err := s.slskd.StartSearch(ctx, s.downloader.SearchQuery(track))
 	if err != nil {
+		slog.Warn("preview: start search failed", "track_id", trackID, "error", err)
 		return nil, fmt.Errorf("start search: %w", err)
 	}
 
 	candidates, err := s.collectCandidates(ctx, search.ID, track)
 	if err != nil {
+		slog.Warn("preview: candidate collection failed", "track_id", trackID, "error", err)
 		_ = s.slskd.DeleteSearch(ctx, search.ID)
 		return nil, err
 	}
@@ -197,6 +231,7 @@ func (s *Service) beginTransfer(ctx context.Context, trackID int64, searchID str
 	best := candidates[0]
 	transfer, err := s.slskd.StartDownload(ctx, best.Username, best.Filename, best.Size)
 	if err != nil {
+		slog.Warn("preview: start download failed", "track_id", trackID, "username", best.Username, "filename", best.Filename, "error", err)
 		return nil, fmt.Errorf("start download: %w", err)
 	}
 
@@ -242,7 +277,13 @@ func (s *Service) GetStatus(ctx context.Context, trackID int64) (*Status, error)
 	}
 	switch {
 	case strings.Contains(transfer.State, "Succeeded"), strings.Contains(transfer.State, "Completed"):
-		return s.statusFor(sess, "completed", nil), nil
+		st := s.statusFor(sess, "completed", nil)
+		st.BytesReceived = transfer.BytesTransferred
+		st.Percent = transfer.PercentComplete
+		if st.Percent == 0 {
+			st.Percent = 100
+		}
+		return st, nil
 	case strings.Contains(transfer.State, "Cancelled"), strings.Contains(transfer.State, "Errored"), strings.Contains(transfer.State, "Rejected"):
 		return s.statusFor(sess, "failed", fmt.Errorf("transfer %s", transfer.State)), nil
 	case transfer.BytesTransferred > 0:

@@ -66,7 +66,7 @@ func main() {
 	org := organizer.NewService(queries, cfg.DownloadsDir, cfg.LibraryPath)
 	dl := downloader.NewService(queries, slskdClient, org, actLog)
 	dl.AddNotifier(navidrome.NewClient(queries))
-	pv := preview.NewService(queries, slskdClient, dl, cfg.SlskdIncompleteDir)
+	pv := preview.NewService(queries, slskdClient, dl, cfg.SlskdIncompleteDir, cfg.DownloadsDir)
 	if !pv.Configured() {
 		slog.Warn("preview disabled: CRATE_SLSKD_INCOMPLETE_DIR not set; mount slskd's incomplete dir to enable")
 	}

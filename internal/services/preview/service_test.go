@@ -389,6 +389,27 @@ func TestStartPreviewSessionLifecycle(t *testing.T) {
 	}
 }
 
+func TestCompletedStatusRetainsTransferProgress(t *testing.T) {
+	env := newStreamEnv(t)
+	ctx := context.Background()
+	if _, err := env.svc.Start(ctx, 1); err != nil {
+		t.Fatal(err)
+	}
+	sess := env.session(t)
+	env.slskd.mu.Lock()
+	env.slskd.transfers[sess.TransferID].BytesTransferred = sess.Size
+	env.slskd.transfers[sess.TransferID].PercentComplete = 100
+	env.slskd.transfers[sess.TransferID].State = "Succeeded"
+	env.slskd.mu.Unlock()
+	st, err := env.svc.GetStatus(ctx, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.State != "completed" || st.BytesReceived != sess.Size || st.Percent != 100 {
+		t.Fatalf("completed status = %+v", st)
+	}
+}
+
 func TestKeepAdoptsTransferAsDownloadRow(t *testing.T) {
 	env := newStreamEnv(t)
 	ctx := context.Background()

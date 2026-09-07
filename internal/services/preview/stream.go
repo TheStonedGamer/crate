@@ -54,7 +54,21 @@ func (s *Service) ServeFile(w http.ResponseWriter, r *http.Request, trackID int6
 
 	f, err := os.Open(path)
 	if os.IsNotExist(err) {
-		return streamErr(http.StatusNotFound, fmt.Errorf("partial file not created yet"))
+		if s.downloadsDir == "" {
+			return streamErr(http.StatusNotFound, fmt.Errorf("partial file not created yet"))
+		}
+		transfer, transferErr := s.slskd.GetDownload(r.Context(), sess.Username, sess.TransferID)
+		if transferErr != nil || !(strings.Contains(transfer.State, "Succeeded") || strings.Contains(transfer.State, "Completed")) {
+			return streamErr(http.StatusNotFound, fmt.Errorf("partial file not created yet"))
+		}
+		path, err = s.completedPath(sess.Username, sess.Filename)
+		if err != nil {
+			return streamErr(http.StatusInternalServerError, err)
+		}
+		f, err = os.Open(path)
+		if os.IsNotExist(err) {
+			return streamErr(http.StatusNotFound, fmt.Errorf("completed file not found"))
+		}
 	}
 	if err != nil {
 		return streamErr(http.StatusInternalServerError, err)
@@ -105,6 +119,22 @@ func (s *Service) ServeFile(w http.ResponseWriter, r *http.Request, trackID int6
 		slog.Debug("preview: stream copy ended", "track_id", trackID, "error", copyErr)
 	}
 	return nil
+}
+
+func (s *Service) completedPath(username, filename string) (string, error) {
+	localized := strings.ReplaceAll(filename, "\\", "/")
+	localized = strings.TrimLeft(localized, "/")
+	parts := strings.Split(localized, "/")
+	clean := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if p := sanitizeSegment(part); p != "" {
+			clean = append(clean, p)
+		}
+	}
+	if len(clean) == 0 {
+		return "", fmt.Errorf("no usable path in %q", filename)
+	}
+	return filepath.Join(append([]string{s.downloadsDir, sanitizeSegment(username)}, clean...)...), nil
 }
 
 func (s *Service) serveRange(w http.ResponseWriter, f *os.File, rng string, onDisk, total int64) error {
