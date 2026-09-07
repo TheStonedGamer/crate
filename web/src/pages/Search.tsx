@@ -13,6 +13,7 @@ export default function Search() {
   const [submitted, setSubmitted] = useState('');
   const [provider, setProvider] = useState<string>('');
   const [country, setCountry] = useState('');
+  const [searchMode, setSearchMode] = useState<'songs' | 'artists'>('songs');
   const [showProviderMenu, setShowProviderMenu] = useState(false);
   const [extraArtists, setExtraArtists] = useState<ArtistSearchResult[]>([]);
   const [offset, setOffset] = useState(PAGE_SIZE);
@@ -31,7 +32,7 @@ export default function Search() {
 
   const defaultProvider = settings?.provider_primary || 'musicbrainz';
   const activeProvider = provider || defaultProvider;
-  const isSongSearch = submitted.includes(' - ');
+  const isSongSearch = searchMode === 'songs';
 
   const activeProviderInfo = providers?.find((p: ProviderInfo) => p.name === activeProvider);
   const providerLabel = activeProviderInfo?.display_name || activeProvider;
@@ -88,7 +89,7 @@ export default function Search() {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Song name - artist"
+            placeholder={searchMode === 'songs' ? 'Song name - artist' : 'Search for an artist...'}
             className="flex-1 bg-zinc-800 rounded-lg px-4 py-2.5 text-sm placeholder-zinc-500 outline-none focus:ring-2 focus:ring-zinc-600"
             autoFocus
           />
@@ -152,6 +153,15 @@ export default function Search() {
           </p>
         )}
       </form>
+
+      <div className="flex items-center gap-1 p-1 mb-4 bg-zinc-800/70 rounded-lg w-fit" role="tablist" aria-label="Search type">
+        {(['songs', 'artists'] as const).map((mode) => (
+          <button key={mode} type="button" role="tab" aria-selected={searchMode === mode}
+            onClick={() => { setSearchMode(mode); setExtraArtists([]); setOffset(PAGE_SIZE); }}
+            className={`px-4 py-1.5 rounded-md text-xs font-medium capitalize transition-colors ${searchMode === mode ? 'bg-white text-zinc-900' : 'text-zinc-400 active:bg-zinc-700'}`}
+          >{mode}</button>
+        ))}
+      </div>
 
       {isLoading && (
         <div className="space-y-1">
