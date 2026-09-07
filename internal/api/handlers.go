@@ -124,9 +124,16 @@ func (s *Server) handleSongSearch(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(query, " - ")
 	trackQuery, artistQuery := query, query
 	type songResult struct {
-		ID, Title, AlbumID, AlbumTitle, AlbumCoverURL string
-		DurationMs, AlbumYear                         int32
-		ArtistID, ArtistName, Country                 string
+		ID            string `json:"id"`
+		Title         string `json:"title"`
+		AlbumID       string `json:"album_id"`
+		AlbumTitle    string `json:"album_title"`
+		AlbumCoverURL string `json:"album_cover_url"`
+		DurationMs    int32  `json:"duration_ms"`
+		AlbumYear     int32  `json:"album_year"`
+		ArtistID      string `json:"artist_id"`
+		ArtistName    string `json:"artist_name"`
+		Country       string `json:"country"`
 	}
 	if len(parts) < 2 {
 		tracks, err := s.providers.SearchArtistTracks(r.Context(), providerName, "", trackQuery, 50)

@@ -163,7 +163,7 @@ export default function Search() {
         ))}
       </div>
 
-      {isLoading && (
+      {!isSongSearch && isLoading && (
         <div className="space-y-1">
           {[...Array(5)].map((_, i) => (
             <div key={i} className="flex items-center gap-3 bg-zinc-800/40 rounded-lg p-2.5 animate-pulse">
