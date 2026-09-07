@@ -68,6 +68,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		"owned_tracks":      ownedTracks,
 		"pending_downloads": pending,
 		"active_downloads":  active,
+		"preview_enabled":   s.preview.Configured(),
 	})
 }
 
