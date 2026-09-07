@@ -240,6 +240,12 @@ Tests live in:
 
 The `testEnv` helper in handlers_test.go wires up real in-memory SQLite, a fake gRPC provider, fake slskd, and an in-memory activity log. Use `newTestEnv(t)` and call `env.do(method, path, body)`. The fake provider returns canned data for artist "1000" with two albums and three tracks.
 
+### Preview Before Download
+
+Preview sessions are in-memory and keyed by track ID. The browse flow is watchTrack-then-start and watchTrack is idempotent. Candidates use the normal downloader scoring; the first transfer is streamed from `CRATE_SLSKD_INCOMPLETE_DIR`. `Keep` adopts that transfer (no restart) and only then creates a download queue row; `Reject` blacklists the source and advances; `Cancel` removes the transfer and partial without blacklisting. Completed files may already have moved to `CRATE_DOWNLOADS_DIR`, so the stream handler falls back there. The HTTP streaming contract advertises on-disk bytes for `200`; full size is revealed in `206 Content-Range` to avoid Chrome `ERR_CONTENT_LENGTH_MISMATCH`.
+
+There is intentionally no startup orphan reconciliation; a restart can leak an in-flight slskd transfer until the running janitor handles it. Preview lifecycle and streaming tests live in `internal/services/preview/service_test.go`.
+
 ## Lidarr API Shim
 
 The Lidarr v1 API compatibility shim lives entirely in `internal/api/lidarr.go` (+ `lidarr_test.go`). **Crate is never changed to accommodate Lidarr.** All translation between Lidarr concepts and Crate internals happens inside `lidarr.go`. If Lidarr needs something Crate doesn't expose, the shim adapts — we do not add fields, endpoints, or behaviors to Crate's core code to make Lidarr work. Lidarr compatibility is a convenience, not a requirement.
@@ -262,6 +268,7 @@ Design decisions with non-obvious trade-offs are documented as ADRs in `docs/adr
 |-----|------|----------|
 | [0001](docs/adr/0001-artist-matching-fallback.md) | Downloader | Auto-downloads require artist+title (manual-search filtering since removed — see 0003) |
 | [0002](docs/adr/0002-async-manual-search.md) | API/Frontend | Async manual search with frontend polling instead of blocking 30s request |
+| [0008](docs/adr/0008-preview-before-download.md) | Preview | In-memory preview sessions, adopt-not-restart, and completed-file streaming fallback |
 | [0003](docs/adr/0003-manual-search-no-filter.md) | Downloader | Manual search returns every slskd result (scored + annotated, never filtered) |
 | [0004](docs/adr/0004-non-destructive-tagging.md) | Tagger | Tagger preserves foreign tags; the `crate:` comment tag was dropped |
 | [0005](docs/adr/0005-recording-id-signal.md) | Importer | MusicBrainz recording id stored as a separate signal (not resolved to release-track) |

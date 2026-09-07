@@ -582,6 +582,10 @@
       </div>
 
       <!-- Settings -->
+      <h2 id="preview">Preview Before Download</h2>
+      <p>Preview a ranked Soulseek candidate before committing it to your library. Crate streams the real transfer while it downloads: <strong>Keep</strong> adopts the existing transfer without restarting it, <strong>Reject</strong> blacklists the source and advances to the next candidate, and <strong>Cancel</strong> removes the transfer without blacklisting.</p>
+      <p>Preview endpoints are <code>POST /api/tracks/{id}/preview/start</code>, <code>GET .../preview/status</code>, <code>GET .../preview/stream</code>, and POST keep/reject (DELETE cancel). Configure <code>CRATE_SLSKD_INCOMPLETE_DIR</code> with the slskd incomplete mount; after completion, Crate falls back to <code>CRATE_DOWNLOADS_DIR</code> because slskd moves finished files immediately.</p>
+      <!-- Settings -->
       <h2 id="settings">UI Settings</h2>
 
       <p>These settings are stored in the database and configurable from the Settings page in the web UI. Changes take effect immediately without restarting.</p>

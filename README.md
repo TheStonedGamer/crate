@@ -76,6 +76,7 @@ Open `http://localhost:6969`.
 - **Shadow banning** -- users who go offline mid-transfer or whose queued downloads stall are temporarily blocked (configurable duration, default 60min). Different from permanent file blacklists -- shadow bans expire automatically.
 - **State-aware stale detection** -- detects stalled downloads with timeouts tuned to the transfer state: actively transferring (5min), queued/waiting for a slot (30min), or requested (10min). Queued stalls trigger shadow bans; active transfer stalls blacklist the specific file.
 - **Blocked sources management** -- view and remove blacklisted files and shadow-banned users from the Settings UI
+- **Preview before download** -- stream ranked Soulseek candidates before downloading; Keep adopts the live transfer, Reject blacklists it and advances, and Cancel cleans up without blacklisting
 - **Manual search** -- browse every slskd result for a track, see scores/format/queue info (blacklisted and locked sources shown but dimmed), and pick which one to download
 - **Quality tiers** -- configure priority-ordered quality tiers (e.g. FLAC > MP3 320 > MP3 256) with an optional fallback toggle to reject files outside your configured tiers. Scheduler scans one artist per day and re-queues tracks that can be upgraded.
 - **Negative keywords** -- skip files matching configurable keywords (e.g. acapella, instrumental) during auto-download. Manual search still shows them so you can override when needed.
@@ -155,6 +156,8 @@ Prefer a custom importer? The schema is documented in [DATABASE.md](DATABASE.md)
 | `CRATE_ACTIVITY_PATH` | `./activity.db` | Activity log database path |
 | `CRATE_SLSKD_URL` | `http://localhost:5030` | slskd API base URL |
 | `CRATE_SLSKD_API_KEY` | -- | slskd API key |
+| `CRATE_SLSKD_INCOMPLETE_DIR` | -- | slskd incomplete directory mounted into Crate for preview streaming |
+| `CRATE_DOWNLOADS_DIR` | `./downloads` | completed-download directory used as the preview fallback after slskd moves a file |
 | `CRATE_DOWNLOADS_DIR` | `./downloads` | Where slskd puts completed files |
 | `CRATE_LIBRARY_PATH` | `./library` | Where organized files are moved |
 | `CRATE_SCAN_INTERVAL` | `6h` | How often to auto-queue wanted tracks and check for new releases |
