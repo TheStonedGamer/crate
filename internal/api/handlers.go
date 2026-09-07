@@ -147,15 +147,30 @@ func (s *Server) handleSongSearch(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "artist search failed")
 		return
 	}
-	results := make([]songResult, 0)
-	for _, artist := range artists.Artists {
-		tracks, trackErr := s.providers.SearchArtistTracks(r.Context(), providerName, artist.Id, trackQuery, 25)
-		if trackErr != nil {
-			continue
+	// Prefer the exact artist-name match. Searching every loosely matching
+	// artist turns one song search into many rate-limited provider requests.
+	var artist *pb.ArtistResult
+	for _, candidate := range artists.Artists {
+		if strings.EqualFold(strings.TrimSpace(candidate.Name), artistQuery) {
+			artist = candidate
+			break
 		}
-		for _, track := range tracks.Tracks {
-			results = append(results, songResult{track.Id, track.Title, track.AlbumId, track.AlbumTitle, track.AlbumCoverUrl, track.DurationMs, track.AlbumYear, artist.Id, artist.Name, artist.Metadata["country"]})
-		}
+	}
+	if artist == nil && len(artists.Artists) > 0 {
+		artist = artists.Artists[0]
+	}
+	if artist == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"tracks": []songResult{}})
+		return
+	}
+	tracks, err := s.providers.SearchArtistTracks(r.Context(), providerName, artist.Id, trackQuery, 25)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "song search failed: "+err.Error())
+		return
+	}
+	results := make([]songResult, 0, len(tracks.Tracks))
+	for _, track := range tracks.Tracks {
+		results = append(results, songResult{track.Id, track.Title, track.AlbumId, track.AlbumTitle, track.AlbumCoverUrl, track.DurationMs, track.AlbumYear, artist.Id, artist.Name, artist.Metadata["country"]})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"tracks": results})
 }
