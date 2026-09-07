@@ -91,7 +91,7 @@ func (s *server) SearchArtists(ctx context.Context, req *pb.SearchRequest) (*pb.
 	}
 
 	var resp struct {
-		Count  int `json:"count"`
+		Count   int `json:"count"`
 		Artists []struct {
 			ID             string `json:"id"`
 			Name           string `json:"name"`
@@ -293,9 +293,9 @@ func (s *server) SearchArtistTracks(ctx context.Context, req *pb.ArtistTrackSear
 
 	var resp struct {
 		Recordings []struct {
-			ID     string `json:"id"`
-			Title  string `json:"title"`
-			Length int    `json:"length"`
+			ID       string `json:"id"`
+			Title    string `json:"title"`
+			Length   int    `json:"length"`
 			Releases []struct {
 				ID           string `json:"id"`
 				Title        string `json:"title"`
@@ -307,8 +307,11 @@ func (s *server) SearchArtistTracks(ctx context.Context, req *pb.ArtistTrackSear
 		} `json:"recordings"`
 	}
 
-	path := fmt.Sprintf("/recording/?query=arid:%s AND recording:%s&limit=%d&fmt=json",
-		req.ArtistId, url.QueryEscape(req.Query), limit)
+	query := "recording:" + url.QueryEscape(req.Query)
+	if req.ArtistId != "" {
+		query = fmt.Sprintf("arid:%s AND %s", req.ArtistId, query)
+	}
+	path := fmt.Sprintf("/recording/?query=%s&limit=%d&fmt=json", query, limit)
 	if err := s.get(ctx, path, &resp); err != nil {
 		return nil, err
 	}

@@ -243,14 +243,16 @@ func (s *server) SearchArtistTracks(ctx context.Context, req *pb.ArtistTrackSear
 	}
 
 	// Deezer search supports artist and track filters
-	q := fmt.Sprintf("artist:\"%s\" track:\"%s\"", req.ArtistId, req.Query)
+	q := fmt.Sprintf("track:\"%s\"", req.Query)
 
 	// First, get artist name since ArtistId is numeric
 	var artistResp struct {
 		Name string `json:"name"`
 	}
-	if err := s.get(ctx, "/artist/"+req.ArtistId, &artistResp); err == nil && artistResp.Name != "" {
-		q = fmt.Sprintf("artist:\"%s\" track:\"%s\"", artistResp.Name, req.Query)
+	if req.ArtistId != "" {
+		if err := s.get(ctx, "/artist/"+req.ArtistId, &artistResp); err == nil && artistResp.Name != "" {
+			q = fmt.Sprintf("artist:\"%s\" track:\"%s\"", artistResp.Name, req.Query)
+		}
 	}
 
 	var resp struct {

@@ -117,18 +117,45 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleSongSearch(w http.ResponseWriter, r *http.Request) {
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 	providerName := r.URL.Query().Get("provider")
-	if query == "" || providerName == "" { writeError(w, http.StatusBadRequest, "q and provider are required"); return }
+	if query == "" || providerName == "" {
+		writeError(w, http.StatusBadRequest, "q and provider are required")
+		return
+	}
 	parts := strings.Split(query, " - ")
 	trackQuery, artistQuery := query, query
-	if len(parts) >= 2 { trackQuery, artistQuery = strings.TrimSpace(parts[0]), strings.TrimSpace(parts[len(parts)-1]) }
+	type songResult struct {
+		ID, Title, AlbumID, AlbumTitle, AlbumCoverURL string
+		DurationMs, AlbumYear                         int32
+		ArtistID, ArtistName, Country                 string
+	}
+	if len(parts) < 2 {
+		tracks, err := s.providers.SearchArtistTracks(r.Context(), providerName, "", trackQuery, 50)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "song search failed")
+			return
+		}
+		results := make([]songResult, 0, len(tracks.Tracks))
+		for _, track := range tracks.Tracks {
+			results = append(results, songResult{ID: track.Id, Title: track.Title, AlbumID: track.AlbumId, AlbumTitle: track.AlbumTitle, AlbumCoverURL: track.AlbumCoverUrl, DurationMs: track.DurationMs, AlbumYear: track.AlbumYear})
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"tracks": results})
+		return
+	}
+	trackQuery, artistQuery = strings.TrimSpace(parts[0]), strings.TrimSpace(parts[len(parts)-1])
 	artists, err := s.providers.SearchWithProvider(r.Context(), providerName, artistQuery, 10, 0)
-	if err != nil { writeError(w, http.StatusInternalServerError, "artist search failed"); return }
-	type songResult struct { ID, Title, AlbumID, AlbumTitle, AlbumCoverURL string; DurationMs, AlbumYear int32; ArtistID, ArtistName, Country string }
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "artist search failed")
+		return
+	}
 	results := make([]songResult, 0)
 	for _, artist := range artists.Artists {
 		tracks, trackErr := s.providers.SearchArtistTracks(r.Context(), providerName, artist.Id, trackQuery, 25)
-		if trackErr != nil { continue }
-		for _, track := range tracks.Tracks { results = append(results, songResult{track.Id, track.Title, track.AlbumId, track.AlbumTitle, track.AlbumCoverUrl, track.DurationMs, track.AlbumYear, artist.Id, artist.Name, artist.Metadata["country"]}) }
+		if trackErr != nil {
+			continue
+		}
+		for _, track := range tracks.Tracks {
+			results = append(results, songResult{track.Id, track.Title, track.AlbumId, track.AlbumTitle, track.AlbumCoverUrl, track.DurationMs, track.AlbumYear, artist.Id, artist.Name, artist.Metadata["country"]})
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"tracks": results})
 }
