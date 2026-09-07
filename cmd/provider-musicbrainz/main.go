@@ -51,7 +51,11 @@ func main() {
 
 	s := grpc.NewServer()
 	pb.RegisterMusicProviderServer(s, &server{
-		http:      &http.Client{Timeout: 15 * time.Second},
+		// MusicBrainz occasionally closes an idle keep-alive connection before
+		// Go reuses it, producing EOF on otherwise valid recording searches.
+		// This provider is deliberately limited to 1 req/s, so fresh connections
+		// are the reliable trade-off.
+		http:      &http.Client{Timeout: 15 * time.Second, Transport: &http.Transport{DisableKeepAlives: true, ForceAttemptHTTP2: false}},
 		limiter:   rate.NewLimiter(1, 1),
 		userAgent: userAgent,
 		baseURL:   mbBaseURL,
