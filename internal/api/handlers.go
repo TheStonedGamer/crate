@@ -90,6 +90,13 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	providerName := r.URL.Query().Get("provider")
+	country := strings.TrimSpace(r.URL.Query().Get("country"))
+	if country != "" && (providerName == "" || providerName == "musicbrainz") {
+		// MusicBrainz supports structured country terms. Keep this server-side
+		// so pagination and totals describe the selected country, not a client
+		//-side slice of the first page.
+		query += " AND country:\"" + strings.ReplaceAll(country, "\"", "") + "\""
+	}
 	var result *provider.SearchResult
 	var err error
 	if providerName != "" {

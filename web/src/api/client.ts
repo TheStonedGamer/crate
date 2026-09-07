@@ -16,8 +16,8 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  search: (q: string, provider?: string, limit = 25, offset = 0) =>
-    request<SearchResponse>(`/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}${provider ? `&provider=${encodeURIComponent(provider)}` : ''}`),
+  search: (q: string, provider?: string, limit = 25, offset = 0, country?: string) =>
+    request<SearchResponse>(`/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}${provider ? `&provider=${encodeURIComponent(provider)}` : ''}${country ? `&country=${encodeURIComponent(country)}` : ''}`),
 
   browseArtist: (id: string, provider?: string) =>
     request<BrowseArtistResult>(`/browse/artist/${id}${provider ? `?provider=${encodeURIComponent(provider)}` : ''}`),

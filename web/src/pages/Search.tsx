@@ -6,11 +6,13 @@ import { formatFans } from '../lib/format';
 import type { ArtistSearchResult, ProviderInfo } from '../types/index';
 
 const PAGE_SIZE = 25;
+const COUNTRIES = [['', 'All countries'], ['US', 'United States'], ['GB', 'United Kingdom'], ['CA', 'Canada'], ['AU', 'Australia'], ['DE', 'Germany'], ['FR', 'France'], ['JP', 'Japan'], ['KR', 'South Korea'], ['BR', 'Brazil'], ['MX', 'Mexico'], ['SE', 'Sweden'], ['IE', 'Ireland'], ['NL', 'Netherlands'], ['NO', 'Norway'], ['ES', 'Spain'], ['IT', 'Italy']] as const;
 
 export default function Search() {
   const [query, setQuery] = useState('');
   const [submitted, setSubmitted] = useState('');
   const [provider, setProvider] = useState<string>('');
+  const [country, setCountry] = useState('');
   const [showProviderMenu, setShowProviderMenu] = useState(false);
   const [extraArtists, setExtraArtists] = useState<ArtistSearchResult[]>([]);
   const [offset, setOffset] = useState(PAGE_SIZE);
@@ -34,8 +36,8 @@ export default function Search() {
   const providerLabel = activeProviderInfo?.display_name || activeProvider;
 
   const { data: searchData, isLoading } = useQuery({
-    queryKey: ['search', submitted, activeProvider],
-    queryFn: () => api.search(submitted, activeProvider, PAGE_SIZE, 0),
+    queryKey: ['search', submitted, activeProvider, country],
+    queryFn: () => api.search(submitted, activeProvider, PAGE_SIZE, 0, country),
     enabled: !!submitted,
   });
 
@@ -46,13 +48,13 @@ export default function Search() {
     if (loadingMore || offset >= total) return;
     setLoadingMore(true);
     try {
-      const data = await api.search(submitted, activeProvider, PAGE_SIZE, offset);
+      const data = await api.search(submitted, activeProvider, PAGE_SIZE, offset, country);
       setExtraArtists((prev) => [...prev, ...(data.artists || [])]);
       setOffset((prev) => prev + PAGE_SIZE);
     } finally {
       setLoadingMore(false);
     }
-  }, [submitted, activeProvider, offset, total, loadingMore]);
+  }, [submitted, activeProvider, country, offset, total, loadingMore]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,10 +81,13 @@ export default function Search() {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search for an artist..."
+            placeholder="Song name - artist"
             className="flex-1 bg-zinc-800 rounded-lg px-4 py-2.5 text-sm placeholder-zinc-500 outline-none focus:ring-2 focus:ring-zinc-600"
             autoFocus
           />
+          <select value={country} onChange={(e) => { setCountry(e.target.value); setExtraArtists([]); setOffset(PAGE_SIZE); }} className="bg-zinc-800 rounded-lg px-3 py-2.5 text-sm text-zinc-300 outline-none focus:ring-2 focus:ring-zinc-600" aria-label="Artist country">
+            {COUNTRIES.map(([code, label]) => <option key={code} value={code}>{label}</option>)}
+          </select>
           <div className="relative" ref={menuRef}>
             <div className="flex">
               <button
@@ -204,8 +209,8 @@ export default function Search() {
           <svg className="w-12 h-12 mx-auto text-zinc-700 mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
           </svg>
-          <p className="text-zinc-500">Find artists to add to your crate</p>
-          <p className="text-zinc-600 text-sm mt-1">Search by name above</p>
+          <p className="text-zinc-500">Find an artist to add to your crate</p>
+          <p className="text-zinc-600 text-sm mt-1">Search “song name - artist”, then choose the real artist country</p>
         </div>
       )}
     </div>
